@@ -2,18 +2,23 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
-	"io"
+	"log"
 	"net"
 	"os"
-	"strconv"
 	"strings"
-)
 
-const DELIM = "\r\n"
+	"github.com/codecrafters-io/redis-starter-go/internal/redis"
+	"github.com/codecrafters-io/redis-starter-go/internal/store"
+)
 
 func main() {
 	fmt.Println("Logs from your program will appear here!")
+
+	log.Println("Initializing store!")
+
+	store := store.NewStore()
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
@@ -27,17 +32,20 @@ func main() {
 			os.Exit(1)
 		}
 
-		go handleConnection(conn)
+		ctx := context.Background()
+		ctx = context.WithValue(ctx, "store", store)
+
+		go handleConnection(ctx, conn)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 
 	for {
 		r := bufio.NewReader(conn)
 
-		args, err := unpackInput(r)
+		args, err := redis.UnpackInput(r)
 		if err != nil {
 			break
 		}
@@ -52,66 +60,42 @@ func handleConnection(conn net.Conn) {
 		case "ECHO":
 			msg := args[1]
 			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(msg), msg)))
+		case "SET":
+			key, value := args[1], args[2]
+
+			storeFromContext := ctx.Value("store")
+
+			if storeFromContext != nil {
+				if store, ok := storeFromContext.(*store.Store); !ok {
+					log.Fatalf("Expected *store.Store, got %T", storeFromContext)
+				} else {
+					store.Set(key, value)
+					conn.Write([]byte("+OK\r\n"))
+				}
+			}
+		case "GET":
+
+			// TODO: fix boilerplate
+			// TODO: what can be better than ctx
+
+			key := args[1]
+
+			storeFromContext := ctx.Value("store")
+
+			if storeFromContext != nil {
+				if store, ok := storeFromContext.(*store.Store); !ok {
+					log.Fatalf("Expected *store.Store, got %T", storeFromContext)
+				} else {
+					value, err := store.Get(key)
+					if err != nil {
+						conn.Write([]byte("$-1\r\n"))
+					}
+					conn.Write([]byte(fmt.Sprintf("+%s\r\n", value)))
+				}
+			}
+
 		default:
 			conn.Write([]byte("-Error\r\n"))
 		}
-
 	}
-}
-
-func parseLen(data []byte) (int, error) {
-	n := strings.Trim(string(data), "\r\n")
-	return strconv.Atoi(n)
-}
-
-func unpackInput(r *bufio.Reader) ([]string, error) {
-	args := make([]string, 0, 64)
-
-	firstLine, err := r.ReadBytes('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	var commandLen int
-
-	if firstLine[0] == '*' {
-		commandLen, err = parseLen(firstLine[1:])
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for i := 0; i < commandLen; i++ {
-
-		line, err := r.ReadBytes('\n')
-		if err != nil {
-			return nil, err
-		}
-
-		var argLen int
-
-		if line[0] == '$' {
-			argLen, err = parseLen(line[1:])
-			if err != nil {
-				fmt.Println("Error: ", err)
-				return nil, err
-			}
-		}
-
-		if argLen == 0 {
-			continue
-		}
-
-		buf := make([]byte, argLen+len(DELIM))
-
-		if _, err = io.ReadFull(r, buf); err != nil {
-			fmt.Println("Error: ", err)
-			return nil, err
-		}
-
-		arg := strings.Trim(string(buf), DELIM)
-		args = append(args, arg)
-	}
-
-	return args, nil
 }
