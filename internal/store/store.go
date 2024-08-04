@@ -10,7 +10,7 @@ import (
 
 type ValueWithExpiration struct {
 	value     interface{}
-	ExpiredAt time.Time
+	ExpiredAt *time.Time
 }
 
 type Store struct {
@@ -28,11 +28,11 @@ func (s *Store) Set(key string, value interface{}, px *int) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	var expirationTime time.Time
+	var expirationTime *time.Time
 	if px != nil {
-		expirationTime = time.Now().Add(time.Duration(*px) * time.Millisecond)
-	} else {
-		expirationTime = time.Time{}
+		t := time.Now().Add(time.Duration(*px) * time.Millisecond)
+
+		expirationTime = &t
 	}
 
 	s.store[key] = ValueWithExpiration{
@@ -40,7 +40,7 @@ func (s *Store) Set(key string, value interface{}, px *int) {
 		ExpiredAt: expirationTime,
 	}
 
-	log.Println("Set handler with px : ", key, value, *px)
+	log.Println("Set handler: ", key, value)
 }
 
 func (s *Store) Get(key string) (interface{}, error) {

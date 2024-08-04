@@ -16,7 +16,7 @@ func NewExpiredCollector(store *Store) *ExpiredCollector {
 
 func (expiredC *ExpiredCollector) Collect() {
 	for key, value := range expiredC.Store.store {
-		if value.ExpiredAt.Before(time.Now()) {
+		if value.ExpiredAt != nil && value.ExpiredAt.Before(time.Now()) {
 			expiredC.Store.Remove(key)
 		}
 	}

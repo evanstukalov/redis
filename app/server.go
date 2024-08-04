@@ -134,8 +134,9 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 					value, err := store.Get(key)
 					if err != nil {
 						conn.Write([]byte("$-1\r\n"))
+					} else {
+						conn.Write([]byte(fmt.Sprintf("+%s\r\n", value)))
 					}
-					conn.Write([]byte(fmt.Sprintf("+%s\r\n", value)))
 				}
 			}
 
