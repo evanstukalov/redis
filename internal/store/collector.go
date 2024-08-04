@@ -10,7 +10,7 @@ type ExpiredCollector struct {
 func NewExpiredCollector(store *Store) *ExpiredCollector {
 	return &ExpiredCollector{
 		Store:  store,
-		Ticker: time.NewTicker(10 * time.Millisecond),
+		Ticker: time.NewTicker(1 * time.Millisecond),
 	}
 }
 
