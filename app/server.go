@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
@@ -16,26 +17,55 @@ import (
 func main() {
 	fmt.Println("Logs from your program will appear here!")
 
-	log.Println("Initializing store!")
-
-	store := store.NewStore()
+	storeObj := store.NewStore()
+	expiredCollector := store.NewExpiredCollector(storeObj)
+	defer expiredCollector.Stop()
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
-			os.Exit(1)
+	defer l.Close()
+
+	connChan := make(chan net.Conn)
+	errChan := make(chan error)
+
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+
+				errChan <- err
+				return
+			}
+
+			connChan <- conn
 		}
+	}()
 
-		ctx := context.Background()
-		ctx = context.WithValue(ctx, "store", store)
+	go func() {
+		for {
+			select {
+			case <-expiredCollector.Ticker.C:
+				expiredCollector.Collect()
+			}
+		}
+	}()
 
-		go handleConnection(ctx, conn)
+	for {
+		select {
+		case conn := <-connChan:
+
+			ctx := context.Background()
+			ctx = context.WithValue(ctx, "store", storeObj)
+
+			go handleConnection(ctx, conn)
+
+		case err := <-errChan:
+			fmt.Println("Error accepting connection", err.Error())
+
+		}
 	}
 }
 
@@ -54,6 +84,8 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 			break
 		}
 
+		var px *int
+
 		switch strings.ToUpper(args[0]) {
 		case "PING":
 			conn.Write([]byte("+PONG\r\n"))
@@ -63,13 +95,26 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 		case "SET":
 			key, value := args[1], args[2]
 
+			if len(args) > 3 {
+				switch strings.ToUpper(args[3]) {
+				case "PX":
+					parsedPx, err := strconv.Atoi(args[4])
+					if err != nil {
+						conn.Write([]byte("px arg in not valid"))
+						return
+					}
+					px = &parsedPx
+				}
+			}
+
 			storeFromContext := ctx.Value("store")
 
 			if storeFromContext != nil {
 				if store, ok := storeFromContext.(*store.Store); !ok {
 					log.Fatalf("Expected *store.Store, got %T", storeFromContext)
 				} else {
-					store.Set(key, value)
+
+					store.Set(key, value, px)
 					conn.Write([]byte("+OK\r\n"))
 				}
 			}
