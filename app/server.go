@@ -143,6 +143,14 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 					}
 				}
 			}
+		case "INFO":
+
+			switch args[1] {
+			case "replication":
+				conn.Write([]byte("$11\r\nrole:master\r\n"))
+			default:
+				conn.Write([]byte("-Error\r\n"))
+			}
 
 		default:
 			conn.Write([]byte("-Error\r\n"))
