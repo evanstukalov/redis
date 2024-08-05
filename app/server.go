@@ -15,15 +15,33 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
+type Config struct {
+	Port int
+	Role string
+}
+
 func main() {
 	port := flag.Int("port", 6379, "Port to listen on")
+	replicaOf := flag.String("replicaof", "", "Replica to another server")
+
 	flag.Parse()
+
+	if *replicaOf == "" {
+		*replicaOf = "master"
+	} else {
+		*replicaOf = "slave"
+	}
+
+	config := Config{
+		Port: *port,
+		Role: *replicaOf,
+	}
 
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
 	defer expiredCollector.Stop()
 
-	address := fmt.Sprintf("0.0.0.0:%d", *port)
+	address := fmt.Sprintf("0.0.0.0:%d", config.Port)
 
 	l, err := net.Listen("tcp", address)
 	if err != nil {
@@ -64,7 +82,7 @@ func main() {
 			ctx := context.Background()
 			ctx = context.WithValue(ctx, "store", storeObj)
 
-			go handleConnection(ctx, conn)
+			go handleConnection(ctx, conn, config)
 
 		case err := <-errChan:
 			fmt.Println("Error accepting connection", err.Error())
@@ -73,7 +91,7 @@ func main() {
 	}
 }
 
-func handleConnection(ctx context.Context, conn net.Conn) {
+func handleConnection(ctx context.Context, conn net.Conn, config Config) {
 	defer conn.Close()
 
 	for {
@@ -147,7 +165,8 @@ func handleConnection(ctx context.Context, conn net.Conn) {
 
 			switch args[1] {
 			case "replication":
-				conn.Write([]byte("$11\r\nrole:master\r\n"))
+				info := fmt.Sprintf("role:%s", config.Role)
+				conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(info), info)))
 			default:
 				conn.Write([]byte("-Error\r\n"))
 			}
