@@ -112,8 +112,27 @@ func (c *InfoCommand) Execute(
 ) {
 	switch args[1] {
 	case "replication":
-		info := fmt.Sprintf("role:%s", config.Role)
-		conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(info), info)))
+		var builder strings.Builder
+		builder.Grow(128)
+
+		role := fmt.Sprintf("role:%s", config.Role)
+		builder.WriteString(fmt.Sprintf("%s\n", role))
+
+		master_replid := fmt.Sprintf("master_replid:%s", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb")
+		builder.WriteString(fmt.Sprintf("%s\n", master_replid))
+
+		master_repl_offset := fmt.Sprintf("master_repl_offset:%d", 0)
+		builder.WriteString(
+			fmt.Sprintf("%s\n", master_repl_offset),
+		)
+
+		result := builder.String()
+
+		finalResult := fmt.Sprintf("$%d\r\n%s\r\n", len(result), result)
+		fmt.Println(finalResult)
+
+		conn.Write([]byte(finalResult))
+
 	default:
 		conn.Write([]byte("-Error\r\n"))
 	}
