@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
+	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
@@ -160,6 +162,11 @@ func (c *PsyncCommand) Execute(
 	conn.Write(
 		[]byte(fmt.Sprintf("+FULLRESYNC %s %d\r\n", config.MasterReplId, config.MasterReplOffset)),
 	)
+
+	emptyRDB, _ := hex.DecodeString(
+		redis.EMPTYRDBSTORE,
+	)
+	conn.Write([]byte(fmt.Sprintf("$%d\r\n%s", len(emptyRDB), emptyRDB)))
 }
 
 var commands = map[string]Command{
