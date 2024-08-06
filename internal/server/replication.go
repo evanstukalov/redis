@@ -1,9 +1,13 @@
 package server
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
+
+	"github.com/codecrafters-io/redis-starter-go/internal/config"
 )
 
 type MasterInfo struct {
@@ -23,7 +27,32 @@ func masterInfoFromParam(replicaOf string) MasterInfo {
 	}
 }
 
-func Handshake(replicaof string) error {
+func sendMessage(conn net.Conn, message string, ch chan<- struct{}) error {
+	ch <- struct{}{}
+	if _, err := conn.Write([]byte(message)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func readAnswer(
+	conn net.Conn,
+	ch <-chan struct{},
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	for range ch {
+
+		message, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			fmt.Println("Error reading from connection: ", err.Error())
+			return
+		}
+		fmt.Println(message)
+	}
+}
+
+func Handshakes(replicaof string, config config.Config) error {
 	masterInfo := masterInfoFromParam(replicaof)
 	addr := masterInfo.Address()
 	conn, err := net.Dial("tcp", addr)
@@ -32,6 +61,26 @@ func Handshake(replicaof string) error {
 		return err
 	}
 	defer conn.Close()
-	conn.Write([]byte("*1\r\n$4\r\nPING\r\n"))
+	ch := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go readAnswer(conn, ch, &wg)
+
+	if err := sendMessage(conn, "*1\r\n$4\r\nPING\r\n", ch); err != nil {
+		return err
+	}
+	if err := sendMessage(
+		conn,
+		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.Port), ch,
+	); err != nil {
+		return err
+	}
+	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n", ch); err != nil {
+		return err
+	}
+	close(ch)
+	wg.Wait()
+
 	return nil
 }

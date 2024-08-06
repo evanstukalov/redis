@@ -21,21 +21,20 @@ func main() {
 
 	flag.Parse()
 
-	var role string
-	if *replicaOf == "" {
-		role = "master"
-	} else {
-		role = "slave"
-    err := server.Handshake(*replicaOf)
-    if err != nil {
-      panic(err)
-    }
-	}
-
 	config := config.Config{
 		Port: *port,
-		Role: role,
 	}
+
+	if *replicaOf == "" {
+    config.Role = "master"
+	} else {
+		config.Role = "slave"
+    if err := server.Handshakes(*replicaOf, config); err != nil {
+      panic(err)
+    }
+
+	}
+
 
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
