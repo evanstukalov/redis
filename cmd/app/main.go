@@ -11,8 +11,8 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
-	"github.com/codecrafters-io/redis-starter-go/internal/store"
 	"github.com/codecrafters-io/redis-starter-go/internal/server"
+	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
 func main() {
@@ -22,19 +22,20 @@ func main() {
 	flag.Parse()
 
 	config := config.Config{
-		Port: *port,
+		Port:             *port,
+		MasterReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+		MasterReplOffset: 0,
 	}
 
 	if *replicaOf == "" {
-    config.Role = "master"
+		config.Role = "master"
 	} else {
 		config.Role = "slave"
-    if err := server.Handshakes(*replicaOf, config); err != nil {
-      panic(err)
-    }
+		if err := server.Handshakes(*replicaOf, config); err != nil {
+			panic(err)
+		}
 
 	}
-
 
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)

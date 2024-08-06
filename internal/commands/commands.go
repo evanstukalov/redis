@@ -118,10 +118,10 @@ func (c *InfoCommand) Execute(
 		role := fmt.Sprintf("role:%s", config.Role)
 		builder.WriteString(fmt.Sprintf("%s\n", role))
 
-		master_replid := fmt.Sprintf("master_replid:%s", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb")
+		master_replid := fmt.Sprintf("master_replid:%s", config.MasterReplId)
 		builder.WriteString(fmt.Sprintf("%s\n", master_replid))
 
-		master_repl_offset := fmt.Sprintf("master_repl_offset:%d", 0)
+		master_repl_offset := fmt.Sprintf("master_repl_offset:%d", config.MasterReplOffset)
 		builder.WriteString(
 			fmt.Sprintf("%s\n", master_repl_offset),
 		)
@@ -149,6 +149,19 @@ func (c *ReplConfCommand) Execute(
 	conn.Write([]byte("+OK\r\n"))
 }
 
+type PsyncCommand struct{}
+
+func (c *PsyncCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	conn.Write(
+		[]byte(fmt.Sprintf("+FULLRESYNC %s %d\r\n", config.MasterReplId, config.MasterReplOffset)),
+	)
+}
+
 var commands = map[string]Command{
 	"PING":     &PingCommand{},
 	"ECHO":     &EchoCommand{},
@@ -156,6 +169,7 @@ var commands = map[string]Command{
 	"GET":      &GetCommand{},
 	"INFO":     &InfoCommand{},
 	"REPLCONF": &ReplConfCommand{},
+	"PSYNC":    &PsyncCommand{},
 }
 
 func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, args []string) {
