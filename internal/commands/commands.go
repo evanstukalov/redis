@@ -138,12 +138,24 @@ func (c *InfoCommand) Execute(
 	}
 }
 
+type ReplConfCommand struct{}
+
+func (c *ReplConfCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	conn.Write([]byte("+OK\r\n"))
+}
+
 var commands = map[string]Command{
-	"PING": &PingCommand{},
-	"ECHO": &EchoCommand{},
-	"SET":  &SetCommand{},
-	"GET":  &GetCommand{},
-	"INFO": &InfoCommand{},
+	"PING":     &PingCommand{},
+	"ECHO":     &EchoCommand{},
+	"SET":      &SetCommand{},
+	"GET":      &GetCommand{},
+	"INFO":     &InfoCommand{},
+	"REPLCONF": &ReplConfCommand{},
 }
 
 func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, args []string) {
