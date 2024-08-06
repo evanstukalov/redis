@@ -12,6 +12,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/server"
 )
 
 func main() {
@@ -20,15 +21,20 @@ func main() {
 
 	flag.Parse()
 
+	var role string
 	if *replicaOf == "" {
-		*replicaOf = "master"
+		role = "master"
 	} else {
-		*replicaOf = "slave"
+		role = "slave"
+    err := server.Handshake(*replicaOf)
+    if err != nil {
+      panic(err)
+    }
 	}
 
 	config := config.Config{
 		Port: *port,
-		Role: *replicaOf,
+		Role: role,
 	}
 
 	storeObj := store.NewStore()
@@ -39,7 +45,7 @@ func main() {
 
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
+		fmt.Println("Failed to bind to port ", config.Port)
 		os.Exit(1)
 	}
 	defer l.Close()
@@ -72,6 +78,9 @@ func main() {
 	for {
 		select {
 		case conn := <-connChan:
+
+			clientAddr := conn.RemoteAddr().String()
+			fmt.Println("Client connected: ", clientAddr)
 
 			ctx := context.Background()
 			ctx = context.WithValue(ctx, "store", storeObj)
