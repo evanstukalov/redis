@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
@@ -76,7 +77,9 @@ func (c *SetCommand) Execute(
 		} else {
 
 			store.Set(key, value, px)
-			conn.Write([]byte("+OK\r\n"))
+			if config.Role == "master" {
+				conn.Write([]byte("+OK\r\n"))
+			}
 		}
 	}
 }
@@ -166,11 +169,6 @@ func (c *PsyncCommand) Execute(
 		[]byte(fmt.Sprintf("+FULLRESYNC %s %d\r\n", config.MasterReplId, config.MasterReplOffset)),
 	)
 
-	emptyRDB, _ := hex.DecodeString(
-		redis.EMPTYRDBSTORE,
-	)
-	conn.Write([]byte(fmt.Sprintf("$%d\r\n%s", len(emptyRDB), emptyRDB)))
-
 	clientsFromContext := ctx.Value("clients")
 	if clientsFromContext != nil {
 		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
@@ -179,6 +177,12 @@ func (c *PsyncCommand) Execute(
 			clients.Set(conn)
 		}
 	}
+	emptyRDB, _ := hex.DecodeString(
+		redis.EMPTYRDBSTORE,
+	)
+	conn.Write([]byte(fmt.Sprintf("$%d\r\n", len(emptyRDB))))
+	time.Sleep(time.Duration(1) * time.Second)
+	conn.Write([]byte(emptyRDB))
 }
 
 var Commands = map[string]Command{

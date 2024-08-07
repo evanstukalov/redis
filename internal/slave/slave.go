@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
@@ -30,29 +29,23 @@ func masterInfoFromParam(replicaOf string) MasterInfo {
 	}
 }
 
-func sendMessage(conn net.Conn, message string, ch chan<- struct{}) error {
-	ch <- struct{}{}
+func sendMessage(conn net.Conn, message string) error {
 	if _, err := conn.Write([]byte(message)); err != nil {
 		return err
 	}
+	readAnswer(conn)
 	return nil
 }
 
 func readAnswer(
 	conn net.Conn,
-	ch <-chan struct{},
-	wg *sync.WaitGroup,
 ) {
-	defer wg.Done()
-	for range ch {
-
-		message, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from connection: ", err.Error())
-			return
-		}
-		fmt.Println(message)
+	message, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading from connection: ", err.Error())
+		return
 	}
+	fmt.Println(message)
 }
 
 func Handshakes(replicaof string, config config.Config) (net.Conn, error) {
@@ -65,30 +58,23 @@ func Handshakes(replicaof string, config config.Config) (net.Conn, error) {
 		return nil, err
 	}
 
-	ch := make(chan struct{})
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go readAnswer(conn, ch, &wg)
-
-	if err := sendMessage(conn, "*1\r\n$4\r\nPING\r\n", ch); err != nil {
+	if err := sendMessage(conn, "*1\r\n$4\r\nPING\r\n"); err != nil {
 		return nil, err
 	}
 	if err := sendMessage(
 		conn,
-		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.Port), ch,
+		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.Port),
 	); err != nil {
 		return nil, err
 	}
-	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n", ch); err != nil {
+	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"); err != nil {
 		return nil, err
 	}
-	if err := sendMessage(conn, "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n", ch); err != nil {
+	if err := sendMessage(conn, "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"); err != nil {
 		return nil, err
 	}
-
-	close(ch)
-	wg.Wait()
+	fmt.Println("Waiting for response after PSYNC")
+	go readAnswer(conn)
 
 	return conn, nil
 }
