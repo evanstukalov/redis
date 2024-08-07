@@ -1,17 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/commands"
+	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
-	"github.com/codecrafters-io/redis-starter-go/internal/redis"
-	"github.com/codecrafters-io/redis-starter-go/internal/server"
+	"github.com/codecrafters-io/redis-starter-go/internal/master"
+	"github.com/codecrafters-io/redis-starter-go/internal/slave"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
@@ -27,19 +27,14 @@ func main() {
 		MasterReplOffset: 0,
 	}
 
-	if *replicaOf == "" {
-		config.Role = "master"
-	} else {
-		config.Role = "slave"
-		if err := server.Handshakes(*replicaOf, config); err != nil {
-			panic(err)
-		}
-
-	}
-
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
 	defer expiredCollector.Stop()
+	clients := clients.NewClients()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, "store", storeObj)
+	ctx = context.WithValue(ctx, "clients", clients)
 
 	address := fmt.Sprintf("0.0.0.0:%d", config.Port)
 
@@ -53,62 +48,29 @@ func main() {
 	connChan := make(chan net.Conn)
 	errChan := make(chan error)
 
-	go func() {
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-
-				errChan <- err
-				return
-			}
-
-			connChan <- conn
+	if *replicaOf == "" {
+		config.Role = "master"
+	} else {
+		config.Role = "slave"
+		if masterConn, err := slave.Handshakes(*replicaOf, config); err != nil {
+			log.Fatalln("There is was error in handshakes with master : ", err)
+		} else {
+			go slave.ReadFromConnection(ctx, masterConn, config)
 		}
-	}()
+	}
 
-	go func() {
-		for {
-			select {
-			case <-expiredCollector.Ticker.C:
-				expiredCollector.Collect()
-			}
-		}
-	}()
+	go master.AcceptConnections(l, connChan, errChan)
+	go expiredCollector.Tick()
 
 	for {
 		select {
 		case conn := <-connChan:
 
-			clientAddr := conn.RemoteAddr().String()
-			fmt.Println("Client connected: ", clientAddr)
-
-			ctx := context.Background()
-			ctx = context.WithValue(ctx, "store", storeObj)
-
-			go handleConnection(ctx, conn, config)
+			go master.ReadFromConnection(ctx, conn, config)
 
 		case err := <-errChan:
 			fmt.Println("Error accepting connection", err.Error())
 
 		}
-	}
-}
-
-func handleConnection(ctx context.Context, conn net.Conn, config config.Config) {
-	defer conn.Close()
-
-	for {
-		r := bufio.NewReader(conn)
-
-		args, err := redis.UnpackInput(r)
-		if err != nil {
-			break
-		}
-
-		if len(args) == 0 {
-			break
-		}
-
-		commands.HandleCommand(ctx, conn, config, args)
 	}
 }

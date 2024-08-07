@@ -25,3 +25,12 @@ func (expiredC *ExpiredCollector) Collect() {
 func (expiredC *ExpiredCollector) Stop() {
 	expiredC.Ticker.Stop()
 }
+
+func (expiredC *ExpiredCollector) Tick() {
+	for {
+		select {
+		case <-expiredC.Ticker.C:
+			expiredC.Collect()
+		}
+	}
+}

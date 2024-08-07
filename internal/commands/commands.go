@@ -9,10 +9,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
+
+var Propagated = [2]string{"SET", "DEL"}
 
 type Command interface {
 	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
@@ -167,9 +170,18 @@ func (c *PsyncCommand) Execute(
 		redis.EMPTYRDBSTORE,
 	)
 	conn.Write([]byte(fmt.Sprintf("$%d\r\n%s", len(emptyRDB), emptyRDB)))
+
+	clientsFromContext := ctx.Value("clients")
+	if clientsFromContext != nil {
+		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
+			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
+		} else {
+			clients.Set(conn)
+		}
+	}
 }
 
-var commands = map[string]Command{
+var Commands = map[string]Command{
 	"PING":     &PingCommand{},
 	"ECHO":     &EchoCommand{},
 	"SET":      &SetCommand{},
@@ -177,14 +189,4 @@ var commands = map[string]Command{
 	"INFO":     &InfoCommand{},
 	"REPLCONF": &ReplConfCommand{},
 	"PSYNC":    &PsyncCommand{},
-}
-
-func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, args []string) {
-	cmd, exists := commands[strings.ToUpper(args[0])]
-	if !exists {
-		conn.Write([]byte("-Error\r\n"))
-		return
-	}
-
-	cmd.Execute(ctx, conn, config, args)
 }
