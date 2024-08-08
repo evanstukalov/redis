@@ -8,7 +8,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
@@ -75,12 +74,12 @@ func (c *SetCommand) Execute(
 		if store, ok := storeFromContext.(*store.Store); !ok {
 			log.Fatalf("Expected *store.Store, got %T", storeFromContext)
 		} else {
-
 			store.Set(key, value, px)
-			if config.Role == "master" {
-				conn.Write([]byte("+OK\r\n"))
-			}
 		}
+	}
+
+	if config.Role == "master" {
+		conn.Write([]byte("+OK\r\n"))
 	}
 }
 
@@ -169,6 +168,13 @@ func (c *PsyncCommand) Execute(
 		[]byte(fmt.Sprintf("+FULLRESYNC %s %d\r\n", config.MasterReplId, config.MasterReplOffset)),
 	)
 
+	emptyRDB, _ := hex.DecodeString(
+		redis.EMPTYRDBSTORE,
+	)
+	conn.Write([]byte(fmt.Sprintf("$%d\r\n", len(emptyRDB))))
+	// conn.Write([]byte(emptyRDB))
+	fmt.Println("sending rdb length")
+
 	clientsFromContext := ctx.Value("clients")
 	if clientsFromContext != nil {
 		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
@@ -177,12 +183,6 @@ func (c *PsyncCommand) Execute(
 			clients.Set(conn)
 		}
 	}
-	emptyRDB, _ := hex.DecodeString(
-		redis.EMPTYRDBSTORE,
-	)
-	conn.Write([]byte(fmt.Sprintf("$%d\r\n", len(emptyRDB))))
-	time.Sleep(time.Duration(1) * time.Second)
-	conn.Write([]byte(emptyRDB))
 }
 
 var Commands = map[string]Command{

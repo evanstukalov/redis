@@ -76,9 +76,8 @@ func Handshakes(conn net.Conn, config config.Config) error {
 	if err := sendMessage(conn, "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"); err != nil {
 		return err
 	}
-	fmt.Println("Waiting for response after PSYNC")
-	readAnswer(conn)
-
+	// fmt.Println("Waiting for response after PSYNC")
+	// readAnswer(conn)
 	fmt.Println("Handshakes with master is over")
 
 	return nil
@@ -102,7 +101,7 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 			break
 		}
 
-		HandleCommand(ctx, conn, config, args)
+		go HandleCommand(ctx, conn, config, args)
 	}
 }
 

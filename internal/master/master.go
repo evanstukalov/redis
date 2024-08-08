@@ -42,7 +42,7 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 			break
 		}
 
-		HandleCommand(ctx, conn, config, args)
+		go HandleCommand(ctx, conn, config, args)
 	}
 }
 
