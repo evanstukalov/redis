@@ -48,7 +48,7 @@ func readAnswer(
 	fmt.Println(message)
 }
 
-func Handshakes(replicaof string, config config.Config) (net.Conn, error) {
+func ConnectMaster(replicaof string, config config.Config) (net.Conn, error) {
 	masterInfo := masterInfoFromParam(replicaof)
 	addr := masterInfo.Address()
 
@@ -57,29 +57,35 @@ func Handshakes(replicaof string, config config.Config) (net.Conn, error) {
 		fmt.Println("Error connecting to master: ", err)
 		return nil, err
 	}
+	return conn, nil
+}
 
+func Handshakes(conn net.Conn, config config.Config) error {
 	if err := sendMessage(conn, "*1\r\n$4\r\nPING\r\n"); err != nil {
-		return nil, err
+		return err
 	}
 	if err := sendMessage(
 		conn,
 		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.Port),
 	); err != nil {
-		return nil, err
+		return err
 	}
 	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"); err != nil {
-		return nil, err
+		return err
 	}
 	if err := sendMessage(conn, "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"); err != nil {
-		return nil, err
+		return err
 	}
 	fmt.Println("Waiting for response after PSYNC")
-	go readAnswer(conn)
+	readAnswer(conn)
 
-	return conn, nil
+	fmt.Println("Handshakes with master is over")
+
+	return nil
 }
 
 func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config) {
+	fmt.Println("Starting consuming commands from master")
 	defer conn.Close()
 
 	for {
@@ -89,6 +95,8 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 		if err != nil {
 			break
 		}
+
+		fmt.Println("New command from master :", args)
 
 		if len(args) == 0 {
 			break

@@ -52,11 +52,16 @@ func main() {
 		config.Role = "master"
 	} else {
 		config.Role = "slave"
-		if masterConn, err := slave.Handshakes(*replicaOf, config); err != nil {
-			log.Fatalln("There is was error in handshakes with master : ", err)
-		} else {
-			go slave.ReadFromConnection(ctx, masterConn, config)
+		masterConn, err := slave.ConnectMaster(*replicaOf, config)
+		if err != nil {
+			log.Fatalln("Error connecting to master: ", err)
 		}
+
+		if err = slave.Handshakes(masterConn, config); err != nil {
+			log.Fatalln("There is was error in handshakes with master : ", err)
+		}
+
+		go slave.ReadFromConnection(ctx, masterConn, config)
 	}
 
 	go master.AcceptConnections(l, connChan, errChan)
